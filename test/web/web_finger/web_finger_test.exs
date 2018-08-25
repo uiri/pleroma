@@ -1,6 +1,7 @@
 defmodule Pleroma.Web.WebFingerTest do
   use Pleroma.DataCase
   alias Pleroma.Web.WebFinger
+  alias Pleroma.Web.XML
   import Pleroma.Factory
 
   describe "host meta" do
@@ -12,13 +13,56 @@ defmodule Pleroma.Web.WebFingerTest do
   end
 
   describe "incoming webfinger request" do
-    test "works for fqns" do
+    test "works for fqns no subdomain" do
       user = insert(:user)
+      endpoint_env = [{:domain, nil}] ++ Application.get_env(:pleroma, Pleroma.Web.Endpoint)
+      Application.put_env(:pleroma, Pleroma.Web.Endpoint, endpoint_env)
+      assert endpoint_env[:domain] == nil
 
       {:ok, result} =
         WebFinger.webfinger("#{user.nickname}@#{Pleroma.Web.Endpoint.host()}", "XML")
 
       assert is_binary(result)
+      {:ok, host_xml} = WebFinger.webfinger_from_xml(XML.parse_document(result))
+      assert host_xml["subject"] == "acct:#{user.nickname}@#{Pleroma.Web.Endpoint.host()}"
+
+      {:ok, host_result_json} =
+        WebFinger.webfinger("#{user.nickname}@#{Pleroma.Web.Endpoint.host()}", "JSON")
+
+      {:ok, host_json} = WebFinger.webfinger_from_json(host_result_json)
+      assert host_json["subject"] == "acct:#{user.nickname}@#{Pleroma.Web.Endpoint.host()}"
+    end
+
+    test "works for fqns with subdomain" do
+      user = insert(:user)
+      domain = "social.localhost"
+      endpoint_env = [{:domain, domain}] ++ Application.get_env(:pleroma, Pleroma.Web.Endpoint)
+      Application.put_env(:pleroma, Pleroma.Web.Endpoint, endpoint_env)
+      assert endpoint_env[:domain] == domain
+
+      {:ok, result} =
+        WebFinger.webfinger("#{user.nickname}@#{Pleroma.Web.Endpoint.host()}", "XML")
+
+      {:ok, host_xml} = WebFinger.webfinger_from_xml(XML.parse_document(result))
+      assert host_xml["subject"] == "acct:#{user.nickname}@#{domain}"
+
+      {:ok, host_result_json} =
+        WebFinger.webfinger("#{user.nickname}@#{Pleroma.Web.Endpoint.host()}", "JSON")
+
+      {:ok, host_json} = WebFinger.webfinger_from_json(host_result_json)
+      assert host_json["subject"] == "acct:#{user.nickname}@#{domain}"
+
+      {:ok, domain_result_xml} = WebFinger.webfinger("#{user.nickname}@#{domain}", "XML")
+      assert is_binary(domain_result_xml)
+      {:ok, domain_xml} = WebFinger.webfinger_from_xml(XML.parse_document(domain_result_xml))
+      assert domain_xml["subject"] == "acct:#{user.nickname}@#{domain}"
+
+      {:ok, domain_result_json} = WebFinger.webfinger("#{user.nickname}@#{domain}", "JSON")
+      {:ok, domain_json} = WebFinger.webfinger_from_json(domain_result_json)
+      assert domain_json["subject"] == "acct:#{user.nickname}@#{domain}"
+
+      assert result == domain_result_xml
+      assert host_result_json == domain_result_json
     end
 
     test "works for ap_ids" do

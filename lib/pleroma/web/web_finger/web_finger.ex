@@ -1,4 +1,5 @@
 defmodule Pleroma.Web.WebFinger do
+  @compile if Mix.env() == :test, do: :export_all
   @httpoison Application.get_env(:pleroma, :httpoison)
 
   alias Pleroma.{User, XmlBuilder}
@@ -26,8 +27,15 @@ defmodule Pleroma.Web.WebFinger do
   end
 
   def webfinger(resource, fmt) when fmt in ["XML", "JSON"] do
+    domain = Application.get_env(:pleroma, Pleroma.Web.Endpoint)[:domain]
     host = Pleroma.Web.Endpoint.host()
-    regex = ~r/(acct:)?(?<username>\w+)@#{host}/
+
+    regex =
+      if domain do
+        ~r/(acct:)?(?<username>\w+)@(#{host}|#{domain})/
+      else
+        ~r/(acct:)?(?<username>\w+)@#{host}/
+      end
 
     with %{"username" => username} <- Regex.named_captures(regex, resource),
          %User{} = user <- User.get_by_nickname(username) do
@@ -48,8 +56,15 @@ defmodule Pleroma.Web.WebFinger do
     {:ok, _private, public} = Salmon.keys_from_pem(user.info["keys"])
     magic_key = Salmon.encode_key(public)
 
+    host =
+      if Application.get_env(:pleroma, Pleroma.Web.Endpoint)[:domain] do
+        Application.get_env(:pleroma, Pleroma.Web.Endpoint)[:domain]
+      else
+        Pleroma.Web.Endpoint.host()
+      end
+
     %{
-      "subject" => "acct:#{user.nickname}@#{Pleroma.Web.Endpoint.host()}",
+      "subject" => "acct:#{user.nickname}@#{host}",
       "aliases" => [user.ap_id],
       "links" => [
         %{
@@ -86,11 +101,18 @@ defmodule Pleroma.Web.WebFinger do
     {:ok, _private, public} = Salmon.keys_from_pem(user.info["keys"])
     magic_key = Salmon.encode_key(public)
 
+    host =
+      if Application.get_env(:pleroma, Pleroma.Web.Endpoint)[:domain] do
+        Application.get_env(:pleroma, Pleroma.Web.Endpoint)[:domain]
+      else
+        Pleroma.Web.Endpoint.host()
+      end
+
     {
       :XRD,
       %{xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0"},
       [
-        {:Subject, "acct:#{user.nickname}@#{Pleroma.Web.Endpoint.host()}"},
+        {:Subject, "acct:#{user.nickname}@#{host}"},
         {:Alias, user.ap_id},
         {:Link,
          %{

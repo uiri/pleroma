@@ -104,3 +104,25 @@ Drops posts with non-public visibility settings.
 * `allow_followersonly`: whether to allow follower-only posts through
    the filter
 * `allow_direct`: whether to allow direct messages through the filter
+
+## Serving Pleroma from a subdomain
+
+Users are primarily identified by user@example.com. If you are already
+serving content at example.com and want to host Pleroma on
+social.example.com but you want to make this identifier the same as, say,
+your email or your XMPP handle, then you should follow these steps:
+
+1. When running generate_config, enter the subdomain from which you are
+   serving Pleroma (e.g. social.example.com).
+2. Uncomment out the domain key in the generated config. It should be
+   populated by default with the subdomain. Change it to the domain you
+   want to use for your handles (e.g. example.com). Leave the host value
+   in the uri key untouched.
+3. Forward requests for example.com/.well-known/webfinger to
+   social.example.com/.well-known/webfinger
+   This will need to be done in the configuration for whatever web server
+   is hosting content on example.com.
+
+If you are not hosting a web server on example.com, or you cannot
+configure either proxying or a redirect for step 3 from that server to
+Pleroma, then you will not be able to configure Pleroma this way.
