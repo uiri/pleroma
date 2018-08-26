@@ -300,11 +300,43 @@ defmodule Pleroma.Web.OStatus do
   def gather_user_info(username) do
     with {:ok, webfinger_data} <- WebFinger.finger(username),
          {:ok, feed_data} <- Websub.gather_feed_data(webfinger_data["topic"]) do
-      {:ok, Map.merge(webfinger_data, feed_data) |> Map.put("fqn", username)}
+      user_data = Map.merge(webfinger_data, feed_data)
+      username_starts_with_acct = String.starts_with?(username, "acct")
+
+      fqn =
+        if username_starts_with_acct do
+          gather_user_fqn(user_data, username)
+        else
+          username
+        end
+
+      {:ok, user_data |> Map.put("fqn", fqn)}
     else
       e ->
         Logger.debug(fn -> "Couldn't gather info for #{username}" end)
         {:error, e}
+    end
+  end
+
+  def gather_user_fqn(user_data, username) do
+    gather_user_fqn(user_data, username, [])
+  end
+
+  def gather_user_fqn(user_data, username, old_usernames) do
+    starts_with_acct = String.starts_with?(user_data["subject"], "acct")
+
+    if starts_with_acct && user_data["subject"] != username &&
+         (old_usernames == [] || !old_usernames.contains(user_data["subject"])) do
+      with ["acct", fqn] <- String.split(user_data["subject"], ":", 2),
+           {:ok, webfinger_data} <- WebFinger.finger(username),
+           {:ok, feed_data} <- Websub.gather_feed_data(webfinger_data["topic"]) do
+        fqn_user_data = Map.merge(webfinger_data, feed_data)
+        gather_user_fqn(fqn_user_data, fqn, old_usernames ++ [username])
+      else
+        _e -> username
+      end
+    else
+      username
     end
   end
 
